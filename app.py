@@ -55,6 +55,7 @@ class FEED(db.Model):
     name = db.Column(db.String, nullable=False)
     link = db.Column(db.String, nullable=False)
     description = db.Column(db.String, nullable=False)
+    read = db.Column(db.Boolean, default=False, nullable=False)
     news_id = db.Column(db.Integer, db.ForeignKey("news.id"))
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     categories = db.relationship("CATEGORIE", secondary=categories_feeds, backref=db.backref("feeds", lazy="dynamic"))
@@ -70,6 +71,10 @@ class CATEGORIE(db.Model):
 class NEWSSchema(ma.Schema):
     class Meta:
         fields = ('id', 'name', 'site_url', 'rss_feed_url', 'user_id')
+
+class CATEGORIESchema(ma.Schema):
+    class Meta:
+        fields = ('id', 'name', 'user_id')
         
 
 class FEEDSchema(ma.SQLAlchemySchema):
@@ -81,9 +86,11 @@ class FEEDSchema(ma.SQLAlchemySchema):
     name = ma.auto_field()
     link = ma.auto_field()
     description = ma.auto_field()
+    read = ma.auto_field()
     news_id = ma.auto_field()
     user_id = ma.auto_field()
-    news = ma.Nested(NEWSSchema)    
+    news = ma.Nested(NEWSSchema) 
+    categories = ma.Nested(CATEGORIESchema(many=True))   
 
 class USERSchema(ma.SQLAlchemySchema):
     class Meta:
@@ -97,6 +104,9 @@ class USERSchema(ma.SQLAlchemySchema):
 
 news_schema = NEWSSchema()
 newss_schema = NEWSSchema(many=True)
+
+categorie_schema = CATEGORIESchema()
+categories_schema = CATEGORIESchema(many=True)
 
 feed_schema = FEEDSchema()
 feeds_schema = FEEDSchema(many=True)
@@ -125,41 +135,52 @@ def decode_token(f):
 
     return decorated    
 
-#main route
-@app.route("/")
-@decode_token
-def index(current_user):
-    
-    if current_user:
-        news = NEWS.query.filter_by(user_id=current_user.id).all()
-        for n in news:
-            NewsFeed = feedparser.parse(n.rss_feed_url)
-            for f in NewsFeed.entries:
-                exists = FEED.query.filter_by(user_id=current_user.id, news_id=n.id, link=f.link).first()
-                if not exists:
-                    new_feed = FEED(name=f.title, user_id=current_user.id, news_id=n.id,description=f.description, link=f.link)
-                    db.session.add(new_feed)
-                    db.session.commit()  
-        user_feeds = FEED.query.filter_by(user_id=current_user.id).all()
-        return render_template("index.html", feeds=user_feeds)
-    else:
-        return render_template("index.html", feeds=[])
-            
-    
-    
-@app.route("/feeds", methods=["GET"])
-@decode_token
-def getFeeds(current_user):
+
+def getUnAuthError():
     errors = {}
+    errors["general"] = "Your session has expired, please login to your account to continue."
+    return jsonify({
+            "code": 401,
+            "errors": errors
+        }), 401
+
+
+    
+#feeds routes
+@app.route("/feeds/read/<feed_id>", methods=["POST"])
+@decode_token
+def readFeed(current_user, feed_id):
     if not current_user:
-        errors["general"] = "You must login first"
+        return getUnAuthError()
+    
+    errors = {}
+    
+    if not feed_id:
+        errors["general"] = "Feed id must be provided"
         return jsonify({
                 "code": 400,
                 "errors": errors
             }), 400
+
+    feed = FEED.query.filter_by(user_id=current_user.id, id=feed_id).first()
+    if feed.read:
+        feed.read = False
+    else:
+        feed.read = True
+    db.session.commit()
+    return feed_schema.jsonify(feed)
+            
+
+@app.route("/feeds", methods=["GET"])
+@decode_token
+def getFeeds(current_user):
+    
+    if not current_user:
+        return getUnAuthError()
        
     else:
         user_feeds = FEED.query.filter_by(user_id=current_user.id).all()
+          
         return feeds_schema.jsonify(user_feeds)
 
 #load_feeds
@@ -167,26 +188,55 @@ def getFeeds(current_user):
 @decode_token
 def loadFeeds(current_user):
     if not current_user:
+        return getUnAuthError()
+    
+        
+    feeds = []
+    news = NEWS.query.filter_by(user_id=current_user.id).all()
+    for n in news:
+        NewsFeed = feedparser.parse(n.rss_feed_url)
+        for f in NewsFeed.entries:
+            exists = FEED.query.filter_by(user_id=current_user.id, news_id=n.id, link=f.link).first()
+            if not exists:
+                new_feed = FEED(name=f.title, user_id=current_user.id, news_id=n.id,description=f.description, link=f.link)
+                db.session.add(new_feed)
+                db.session.commit() 
+                feeds.append(new_feed)
+    return feeds_schema.jsonify(feeds) 
+        
+@app.route("/feeds/<feed_id>/categories", methods=["PUT"])
+@decode_token
+def setFeedCategories(current_user, feed_id):
+    if not current_user:
+        return getUnAuthError()
+
+    errors = {}
+    args = request.get_json()
+    if not args:
+        errors["general"] = "Args must be provided"
+        return jsonify({
+                "code": 400,
+                "errors": errors
+            }), 400
+    categories = args["categories"]
+    if not categories:
+        errors["categories"] = "Categories should be provided"
         return jsonify({
             "code": 400,
-            "message": "You must login first"
+            "errors": errors
         }), 400
-    else:
-        
-        feeds = []
-        news = NEWS.query.filter_by(user_id=current_user.id).all()
-        for n in news:
-            NewsFeed = feedparser.parse(n.rss_feed_url)
-            for f in NewsFeed.entries:
-                exists = FEED.query.filter_by(user_id=current_user.id, news_id=n.id, link=f.link).first()
-                if not exists:
-                    new_feed = FEED(name=f.title, user_id=current_user.id, news_id=n.id,description=f.description, link=f.link)
-                    db.session.add(new_feed)
-                    db.session.commit() 
-                    feeds.append(new_feed)
-        return feeds_schema.jsonify(feeds) 
-        
-            
+
+    feed = FEED.query.filter_by(user_id=current_user.id, id=feed_id).first()
+    found_categories = [] 
+    for c in categories:
+        categorie = CATEGORIE.query.filter_by(user_id=current_user.id, id=c).first()
+        found_categories.append(categorie)
+    
+    feed.categories = found_categories
+    db.session.commit()
+
+    return feed_schema.jsonify(feed)
+    
     
     
     
@@ -302,22 +352,135 @@ def register():
             "message": "This request only accept POST method"
         }), 400
 
+
+#categories routes
+
+@app.route("/categories/<categorie_id>", methods=["DELETE"])
+@decode_token
+def deleteCategorie(current_user, categorie_id):
+    if not current_user:
+        return getUnAuthError()
+    categorie = CATEGORIE.query.filter_by(user_id=current_user.id, id=categorie_id).first()
+    errors = {}
+    if not categorie:
+        errors["general"] = "Categorie not found"
+        return jsonify({
+            "code": 404,
+            "errors": errors
+        }), 404
+    feeds = FEED.query.filter_by(user_id=current_user.id).all()
+    for f in feeds:
+        for cat in f.categories:
+            if cat.id == categorie_id:
+                errors["general"] = "Categorie is used in feeds"
+                return jsonify({
+                    "code": 400,
+                    "errors": errors
+                }), 400
+
+    
+    
+    db.session.delete(categorie)
+    db.session.commit()
+
+    return jsonify({
+            "code": 200,
+            "message": "News item deleted"
+        }), 200
+
+@app.route("/categories", methods=["GET"])
+@decode_token
+def getCategories(current_user):
+    if not current_user:
+        return getUnAuthError()
+    
+    categories = CATEGORIE.query.filter_by(user_id=current_user.id).all()
+    return categories_schema.jsonify(categories), 200
+
+
+@app.route("/categories", methods=["POST"])
+@decode_token
+def addCategorie(current_user):
+    if not current_user:
+        return getUnAuthError()
+    if request.method == "POST":
+        errors = {}
+        args = request.get_json()
+        if not args:
+            errors["general"] = "Args must be provided"
+            return jsonify({
+                    "code": 400,
+                    "errors": errors
+                }), 400
+        name = args["name"]
+       
+        
+        if not name:
+            errors["name"] = "Name should be provided"
+            return jsonify({
+                "code": 400,
+                "errors": errors
+            }), 400
+            
+        
+        categorie = CATEGORIE(user_id=current_user.id,name=name)
+        db.session.add(categorie)
+        db.session.commit()
+        
+        return categorie_schema.jsonify(categorie), 200
+
+    else:
+        return jsonify({
+            "code": 400,
+            "message": "This request only accept POST method"
+        }), 400
+
+@app.route("/categories/<categorie_id>", methods=["PUT"])
+@decode_token
+def updateCategorie(current_user, categorie_id):
+    if not current_user:
+        return getUnAuthError()
+    categorie = CATEGORIE.query.filter_by(user_id=current_user.id, id=categorie_id).first()
+    errors = {}
+    if not categorie:
+        errors["general"] = "Categorie not found"
+        return jsonify({
+            "code": 404,
+            "errors": errors
+        }), 404
+    
+    
+    args = request.get_json()
+    if not args:
+        errors["general"] = "Args must be provided"
+        return jsonify({
+                "code": 400,
+                "errors": errors
+            }), 400
+    name = args["name"]
+   
+    if name:
+        categorie.name = name
+   
+
+    db.session.commit()
+    return categorie_schema.jsonify(categorie)
+
+
 #news routes
 
 @app.route("/news/<news_id>", methods=["DELETE"])
 @decode_token
 def deleteNews(current_user, news_id):
     if not current_user:
-        return jsonify({
-            "code": 400,
-            "message": "You must login first"
-        }), 400
+        return getUnAuthError()
     news = NEWS.query.filter_by(user_id=current_user.id, id=news_id).first()
-    
+    errors = {}
     if not news:
+        errors["general"] = "News not found"
         return jsonify({
             "code": 404,
-            "message": "News not found"
+            "errors": errors
         }), 404
     feeds = FEED.query.filter_by(user_id=current_user.id, news_id=news_id).delete()
     
@@ -333,10 +496,7 @@ def deleteNews(current_user, news_id):
 @decode_token
 def getNews(current_user):
     if not current_user:
-        return jsonify({
-            "code": 400,
-            "message": "You must login first"
-        }), 400
+        return getUnAuthError()
     
     news = NEWS.query.filter_by(user_id=current_user.id).all()
     return newss_schema.jsonify(news), 200
@@ -346,10 +506,7 @@ def getNews(current_user):
 @decode_token
 def addNews(current_user):
     if not current_user:
-        return jsonify({
-            "code": 400,
-            "message": "You must login first"
-        }), 400
+        return getUnAuthError()
     if request.method == "POST":
         errors = {}
         args = request.get_json()
@@ -399,21 +556,28 @@ def addNews(current_user):
 @decode_token
 def updateNews(current_user, news_id):
     if not current_user:
-        return jsonify({
-            "code": 400,
-            "message": "You must login first"
-        }), 400
+        return getUnAuthError()
     news = NEWS.query.filter_by(user_id=current_user.id, id=news_id).first()
-
+    errors = {}
     if not news:
+        errors["general"] = "News not found"
         return jsonify({
             "code": 404,
-            "message": "News not found"
+            "errors": errors
         }), 404
 
-    name = request.form.get("name")
-    site_url = request.form.get("site_url")
-    rss_feed_url = request.form.get("rss_feed_url")
+
+    args = request.get_json()
+    if not args:
+        errors["general"] = "Args must be provided"
+        return jsonify({
+                "code": 400,
+                "errors": errors
+            }), 400
+    name = args["name"]
+    site_url = args["site_url"]
+    rss_feed_url = args["rss_feed_url"]
+    
     if name:
         news.name = name
     if site_url:
@@ -422,10 +586,7 @@ def updateNews(current_user, news_id):
         news.rss_feed_url = rss_feed_url
 
     db.session.commit()
-    return jsonify({
-            "code": 200,
-            "message": "News item updated successfully"
-        }), 200
+    return news_schema.jsonify(news)
 
 if __name__ == "__main__":
     app.debug = True
