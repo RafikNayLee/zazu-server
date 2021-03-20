@@ -11,6 +11,7 @@ import os
 import feedparser
 import jwt
 import datetime
+from randomColor import getRandomColor
 
 
 app = Flask(__name__)
@@ -45,6 +46,7 @@ class NEWS(db.Model):
     name = db.Column(db.String, nullable=False)
     site_url = db.Column(db.String, nullable=False)
     rss_feed_url = db.Column(db.String, nullable=False)
+    color = db.Column(db.String, default=getRandomColor())
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     feeds = db.relationship("FEED", backref="news")
    
@@ -64,17 +66,18 @@ class CATEGORIE(db.Model):
     __tablename__ = 'categories'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, nullable=False)
+    color = db.Column(db.String, default=getRandomColor())
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
 
 
 #SCHEMAS
 class NEWSSchema(ma.Schema):
     class Meta:
-        fields = ('id', 'name', 'site_url', 'rss_feed_url', 'user_id')
+        fields = ('id', 'name', 'site_url', 'rss_feed_url', 'user_id', 'color')
 
 class CATEGORIESchema(ma.Schema):
     class Meta:
-        fields = ('id', 'name', 'user_id')
+        fields = ('id', 'name', 'user_id', 'color')
         
 
 class FEEDSchema(ma.SQLAlchemySchema):
@@ -219,20 +222,19 @@ def setFeedCategories(current_user, feed_id):
                 "errors": errors
             }), 400
     categories = args["categories"]
-    if not categories:
-        errors["categories"] = "Categories should be provided"
-        return jsonify({
-            "code": 400,
-            "errors": errors
-        }), 400
+    # print(args)
+    
 
     feed = FEED.query.filter_by(user_id=current_user.id, id=feed_id).first()
-    found_categories = [] 
-    for c in categories:
-        categorie = CATEGORIE.query.filter_by(user_id=current_user.id, id=c).first()
-        found_categories.append(categorie)
-    
-    feed.categories = found_categories
+    if not categories:
+        feed.categories = []
+    else:
+        found_categories = [] 
+        for c in categories:
+            categorie = CATEGORIE.query.filter_by(user_id=current_user.id, id=c).first()
+            found_categories.append(categorie)
+            feed.categories = found_categories
+
     db.session.commit()
 
     return feed_schema.jsonify(feed)
@@ -423,7 +425,7 @@ def addCategorie(current_user):
             }), 400
             
         
-        categorie = CATEGORIE(user_id=current_user.id,name=name)
+        categorie = CATEGORIE(user_id=current_user.id, name=name, color=getRandomColor())
         db.session.add(categorie)
         db.session.commit()
         
@@ -540,7 +542,7 @@ def addNews(current_user):
                 "code": 400,
                 "errors": errors
             }), 400
-        news = NEWS(user_id=current_user.id,name=name, site_url=site_url, rss_feed_url=rss_feed_url)
+        news = NEWS(user_id=current_user.id,name=name, site_url=site_url, rss_feed_url=rss_feed_url, color=getRandomColor())
         db.session.add(news)
         db.session.commit()
         
