@@ -13,6 +13,7 @@ Jinja2==2.11.3
 MarkupSafe==1.1.1
 marshmallow==3.10.0
 marshmallow-sqlalchemy==0.24.2
+psycopg2==2.8.6
 PyJWT==2.0.1
 python-dotenv==0.15.0
 sgmllib3k==1.0.0
