@@ -590,6 +590,9 @@ def updateNews(current_user, news_id):
     db.session.commit()
     return news_schema.jsonify(news)
 
-if __name__ == "__main__":
-    app.debug = True
+def runApp():
     app.run()
+    return app
+
+if __name__ == "__main__":
+    runApp()
