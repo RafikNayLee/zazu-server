@@ -595,5 +595,5 @@ def runApp():
     app.run()
     return app
 
-# if __name__ == "__main__":
-    # runApp()
+if __name__ == "__main__":
+    runApp()
