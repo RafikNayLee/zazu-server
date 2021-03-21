@@ -11,6 +11,7 @@ import os
 import feedparser
 import jwt
 import datetime
+from time import mktime
 from randomColor import getRandomColor
 
 
@@ -57,6 +58,7 @@ class FEED(db.Model):
     name = db.Column(db.String, nullable=False)
     link = db.Column(db.String, nullable=False)
     description = db.Column(db.String, nullable=False)
+    pubDate = db.Column(db.DateTime, nullable=False)
     read = db.Column(db.Boolean, default=False, nullable=False)
     news_id = db.Column(db.Integer, db.ForeignKey("news.id"))
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"))
@@ -89,6 +91,7 @@ class FEEDSchema(ma.SQLAlchemySchema):
     name = ma.auto_field()
     link = ma.auto_field()
     description = ma.auto_field()
+    pubDate = ma.auto_field()
     read = ma.auto_field()
     news_id = ma.auto_field()
     user_id = ma.auto_field()
@@ -182,7 +185,7 @@ def getFeeds(current_user):
         return getUnAuthError()
        
     else:
-        user_feeds = FEED.query.filter_by(user_id=current_user.id).all()
+        user_feeds = FEED.query.order_by("pubDate desc").filter_by(user_id=current_user.id).all()
           
         return feeds_schema.jsonify(user_feeds)
 
@@ -198,10 +201,12 @@ def loadFeeds(current_user):
     news = NEWS.query.filter_by(user_id=current_user.id).all()
     for n in news:
         NewsFeed = feedparser.parse(n.rss_feed_url)
+        
         for f in NewsFeed.entries:
+            
             exists = FEED.query.filter_by(user_id=current_user.id, news_id=n.id, link=f.link).first()
             if not exists:
-                new_feed = FEED(name=f.title, user_id=current_user.id, news_id=n.id,description=f.description, link=f.link)
+                new_feed = FEED(name=f.title, user_id=current_user.id, news_id=n.id,description=f.description, link=f.link, pubDate=datetime.datetime.fromtimestamp(mktime(f.published_parsed)))
                 db.session.add(new_feed)
                 db.session.commit() 
                 feeds.append(new_feed)
