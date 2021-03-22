@@ -185,7 +185,7 @@ def getFeeds(current_user):
         return getUnAuthError()
        
     else:
-        user_feeds = FEED.query.order_by("pubDate desc").filter_by(user_id=current_user.id).all()
+        user_feeds = FEED.query.filter_by(user_id=current_user.id).all()
           
         return feeds_schema.jsonify(user_feeds)
 
