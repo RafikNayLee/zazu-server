@@ -3,6 +3,7 @@ click==7.1.2
 feedparser==6.0.2
 Flask==1.1.2
 Flask-Cors==3.0.10
+flask-heroku==0.1.9
 flask-marshmallow==0.14.0
 Flask-Session==0.3.2
 Flask-SQLAlchemy==2.5.1
@@ -13,6 +14,7 @@ Jinja2==2.11.3
 MarkupSafe==1.1.1
 marshmallow==3.10.0
 marshmallow-sqlalchemy==0.24.2
+psycopg2==2.8.6
 PyJWT==2.0.1
 python-dotenv==0.15.0
 sgmllib3k==1.0.0
