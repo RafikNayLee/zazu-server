@@ -157,6 +157,8 @@ def getUnAuthError():
         }), 401
 
 
+def getFeedsForUser(current_user):
+    return FEED.query.filter_by(user_id=current_user.id).order_by(desc(FEED.pubDate)).all()
     
 #feeds routes
 @app.route("/feeds/read/<feed_id>", methods=["POST"])
@@ -191,9 +193,8 @@ def getFeeds(current_user):
         return getUnAuthError()
        
     else:
-        user_feeds = FEED.query.filter_by(user_id=current_user.id).order_by(desc(FEED.pubDate)).all()
           
-        return feeds_schema.jsonify(user_feeds)
+        return feeds_schema.jsonify(getFeedsForUser(current_user))
 
 #load_feeds
 @app.route("/loadFeeds", methods=["GET"])
@@ -215,9 +216,8 @@ def loadFeeds(current_user):
                 new_feed = FEED(name=f.title, user_id=current_user.id, news_id=n.id,description=f.description, link=f.link, pubDate=datetime.datetime.fromtimestamp(mktime(f.published_parsed)))
                 db.session.add(new_feed)
                 db.session.commit() 
-    user_feeds = FEED.query.filter_by(user_id=current_user.id).order_by(desc(FEED.pubDate)).all()
           
-    return feeds_schema.jsonify(user_feeds)
+    return feeds_schema.jsonify(getFeedsForUser(current_user))
         
 @app.route("/feeds/<feed_id>/categories", methods=["PUT"])
 @decode_token
