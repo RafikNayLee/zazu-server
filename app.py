@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
 from flask_marshmallow import Marshmallow 
 from flask_cors import CORS
@@ -190,7 +191,7 @@ def getFeeds(current_user):
         return getUnAuthError()
        
     else:
-        user_feeds = FEED.query.filter_by(user_id=current_user.id).all()
+        user_feeds = FEED.query.filter_by(user_id=current_user.id).order_by(desc(FEED.pubDate)).all()
           
         return feeds_schema.jsonify(user_feeds)
 
@@ -202,7 +203,7 @@ def loadFeeds(current_user):
         return getUnAuthError()
     
         
-    feeds = []
+    
     news = NEWS.query.filter_by(user_id=current_user.id).all()
     for n in news:
         NewsFeed = feedparser.parse(n.rss_feed_url)
@@ -214,8 +215,9 @@ def loadFeeds(current_user):
                 new_feed = FEED(name=f.title, user_id=current_user.id, news_id=n.id,description=f.description, link=f.link, pubDate=datetime.datetime.fromtimestamp(mktime(f.published_parsed)))
                 db.session.add(new_feed)
                 db.session.commit() 
-                feeds.append(new_feed)
-    return feeds_schema.jsonify(feeds) 
+    user_feeds = FEED.query.filter_by(user_id=current_user.id).order_by(desc(FEED.pubDate)).all()
+          
+    return feeds_schema.jsonify(user_feeds)
         
 @app.route("/feeds/<feed_id>/categories", methods=["PUT"])
 @decode_token
