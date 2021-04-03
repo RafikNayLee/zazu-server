@@ -496,7 +496,10 @@ def deleteNews(current_user, news_id):
             "code": 404,
             "errors": errors
         }), 404
-    feeds = FEED.query.filter_by(user_id=current_user.id, news_id=news_id).delete()
+    feeds = FEED.query.filter_by(user_id=current_user.id, news_id=news_id).all()
+    for f in feeds:
+        f.categories = []
+        db.session.delete(f)
     
     db.session.delete(news)
     db.session.commit()
